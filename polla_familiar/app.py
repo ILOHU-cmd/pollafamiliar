@@ -5,13 +5,13 @@ from __future__ import annotations
 import streamlit as st
 
 from auth import get_current_user, hash_password, login_user, logout_user, verify_password
-from storage import create_user, get_user_by_username, get_users, seed_admin_if_empty
+from storage import create_user, get_user_by_username, get_users, seed_admin_if_empty, update_user
 
 
 st.set_page_config(page_title="Polla Familiar", page_icon="⚽", layout="centered")
 
 if not get_users():
-    seed_admin_if_empty("admin", "admin@polla.local", hash_password("admin123"))
+    seed_admin_if_empty("adminp0lla", hash_password("p0lla2026"))
 
 st.title("Polla Familiar")
 st.caption("Predice marcadores, suma puntos y mira cómo va la familia.")
@@ -21,6 +21,29 @@ if current_user:
     st.success(f"Sesión activa: {current_user['username']}")
     if current_user.get("is_admin"):
         st.info("Usuario administrador. Puedes cargar partidos desde la página Admin.")
+
+    with st.expander("Cambiar contraseña", expanded=False):
+        with st.form("password_form"):
+            new_password = st.text_input("Nueva contraseña", type="password")
+            confirm_password = st.text_input("Confirmar nueva contraseña", type="password")
+            profile_submitted = st.form_submit_button("Guardar contraseña")
+
+        if profile_submitted:
+            if not new_password:
+                st.error("Ingresa una contraseña.")
+            elif new_password != confirm_password:
+                st.error("Las contraseñas no coinciden.")
+            elif len(new_password) < 6:
+                st.error("La contraseña debe tener al menos 6 caracteres.")
+            else:
+                updated = update_user(
+                    user_id=current_user["id"],
+                    password_hash=hash_password(new_password),
+                )
+                login_user(updated)
+                st.success("Contraseña actualizada.")
+                st.rerun()
+
     if st.button("Cerrar sesión"):
         logout_user()
         st.rerun()
@@ -49,14 +72,13 @@ with tab_login:
 with tab_register:
     with st.form("register_form"):
         new_username = st.text_input("Usuario", key="register_username")
-        email = st.text_input("Correo")
         password = st.text_input("Contraseña", type="password", key="register_password")
         confirm_password = st.text_input("Confirmar contraseña", type="password")
         submitted = st.form_submit_button("Crear cuenta")
 
     if submitted:
-        if not new_username.strip() or not email.strip() or not password:
-            st.error("Completa usuario, correo y contraseña.")
+        if not new_username.strip() or not password:
+            st.error("Completa usuario y contraseña.")
         elif password != confirm_password:
             st.error("Las contraseñas no coinciden.")
         elif len(password) < 6:
@@ -65,7 +87,6 @@ with tab_register:
             try:
                 user = create_user(
                     username=new_username,
-                    email=email,
                     password_hash=hash_password(password),
                 )
             except ValueError as exc:
@@ -76,4 +97,4 @@ with tab_register:
                 st.rerun()
 
 st.divider()
-st.caption("Primer acceso admin: usuario `admin`, contraseña `admin123`. Cámbialo o reemplázalo cuando agregues tu capa de base de datos.")
+st.caption("Primer acceso admin: usuario `adminp0lla`, contraseña `p0lla2026`. Cámbialo o reemplázalo cuando agregues tu capa de base de datos.")

@@ -80,30 +80,17 @@ def get_user_by_username(username: str) -> dict[str, Any] | None:
     return None
 
 
-def get_user_by_email(email: str) -> dict[str, Any] | None:
-    """Return a user by email using case-insensitive comparison."""
-    normalized = email.strip().lower()
-    for user in _read_data()["users"]:
-        if user["email"].lower() == normalized:
-            return deepcopy(user)
-    return None
-
-
-def create_user(username: str, email: str, password_hash: str, is_admin: bool = False) -> dict[str, Any]:
-    """Create and return a user, raising ValueError for duplicate username/email."""
+def create_user(username: str, password_hash: str, is_admin: bool = False) -> dict[str, Any]:
+    """Create and return a user, raising ValueError for duplicate username."""
     data = _read_data()
     normalized_username = username.strip()
-    normalized_email = email.strip().lower()
 
     if any(user["username"].lower() == normalized_username.lower() for user in data["users"]):
         raise ValueError("El usuario ya existe.")
-    if any(user["email"].lower() == normalized_email for user in data["users"]):
-        raise ValueError("El correo ya está registrado.")
 
     user = {
         "id": _next_id(data["users"]),
         "username": normalized_username,
-        "email": normalized_email,
         "password_hash": password_hash,
         "is_admin": bool(is_admin),
         "created_at": _now_iso(),
@@ -111,6 +98,26 @@ def create_user(username: str, email: str, password_hash: str, is_admin: bool = 
     data["users"].append(user)
     _write_data(data)
     return deepcopy(user)
+
+
+def update_user(
+    *,
+    user_id: int,
+    password_hash: str | None = None,
+) -> dict[str, Any]:
+    """Update a user's password hash. Raises ValueError if user does not exist."""
+    data = _read_data()
+
+    for index, user in enumerate(data["users"]):
+        if int(user["id"]) == int(user_id):
+            updated = {**user}
+            if password_hash:
+                updated["password_hash"] = password_hash
+            data["users"][index] = updated
+            _write_data(data)
+            return deepcopy(updated)
+
+    raise ValueError("El usuario no existe.")
 
 
 def get_matches() -> list[dict[str, Any]]:
@@ -243,7 +250,7 @@ def get_leaderboard() -> list[dict[str, Any]]:
     return sorted(rows, key=lambda row: (-row["points"], row["username"].lower()))
 
 
-def seed_admin_if_empty(username: str, email: str, password_hash: str) -> dict[str, Any] | None:
+def seed_admin_if_empty(username: str, password_hash: str) -> dict[str, Any] | None:
     """Create an initial admin when the user table is empty; otherwise return None."""
     data = _read_data()
     if data["users"]:
@@ -252,7 +259,6 @@ def seed_admin_if_empty(username: str, email: str, password_hash: str) -> dict[s
     user = {
         "id": 1,
         "username": username,
-        "email": email,
         "password_hash": password_hash,
         "is_admin": True,
         "created_at": _now_iso(),

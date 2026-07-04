@@ -19,7 +19,26 @@
       "status": "SCHEDULED",
       "home_score": null,
       "away_score": null
+    },
+    {
+      "id": 2,
+      "external_id": "",
+      "home_team": "pipo",
+      "away_team": "wiwi",
+      "utc_date": "2026-07-05T20:55:00+00:00",
+      "status": "SCHEDULED",
+      "home_score": null,
+      "away_score": null
     }
   ],
-  "predictions": []
+  "predictions": [
+    {
+      "id": 1,
+      "user_id": 1,
+      "match_id": 2,
+      "pred_home": 1,
+      "pred_away": 1,
+      "points": null
+    }
+  ]
 }

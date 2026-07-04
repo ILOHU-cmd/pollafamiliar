@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timedelta, timezone
 
 import streamlit as st
 
 from auth import require_admin
 from scoring import calculate_points
-from storage import get_matches, get_predictions, update_prediction_points, upsert_match
+from storage import get_matches, get_prediction, get_predictions, save_prediction, update_prediction_points, upsert_match
 
 
 st.set_page_config(page_title="Admin", page_icon="⚙️", layout="wide")
@@ -24,7 +24,7 @@ selected_label = st.selectbox("Partido", list(match_options.keys()))
 selected_id = match_options[selected_label]
 selected_match = next((match for match in matches if match["id"] == selected_id), None)
 
-default_dt = datetime.now(timezone.utc)
+default_dt = datetime.now(timezone.utc) + timedelta(hours=2)
 if selected_match:
     default_dt = datetime.fromisoformat(selected_match["utc_date"])
     if default_dt.tzinfo is None:
@@ -63,6 +63,30 @@ with st.form("match_form"):
             disabled=not has_score,
         )
 
+    admin_user_id = st.session_state["user_id"]
+    existing_pred = get_prediction(admin_user_id, selected_id) if selected_id else None
+    can_predict = status != "FINISHED"
+    st.subheader("Tu predicción (como administrador)")
+    pred_col_home, pred_col_away = st.columns(2)
+    with pred_col_home:
+        pred_home = st.number_input(
+            "Tu pronóstico: goles local",
+            min_value=0,
+            step=1,
+            value=int(existing_pred["pred_home"]) if existing_pred else 0,
+            disabled=not can_predict,
+            key="admin_pred_home",
+        )
+    with pred_col_away:
+        pred_away = st.number_input(
+            "Tu pronóstico: goles visitante",
+            min_value=0,
+            step=1,
+            value=int(existing_pred["pred_away"]) if existing_pred else 0,
+            disabled=not can_predict,
+            key="admin_pred_away",
+        )
+
     submitted = st.form_submit_button("Guardar partido")
 
 if submitted:
@@ -81,6 +105,14 @@ if submitted:
             away_score=int(away_score) if has_score else None,
         )
         st.success(f"Partido guardado: {saved['home_team']} vs {saved['away_team']}.")
+
+        if can_predict:
+            save_prediction(
+                user_id=st.session_state["user_id"],
+                match_id=saved["id"],
+                pred_home=int(pred_home),
+                pred_away=int(pred_away),
+            )
         st.rerun()
 
 st.divider()
