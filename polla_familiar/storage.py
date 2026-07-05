@@ -174,6 +174,23 @@ def upsert_match(
     return deepcopy(match)
 
 
+def delete_match(match_id: int) -> None:
+    """Delete a match and all predictions associated with it."""
+    data = _read_data()
+    original_match_count = len(data["matches"])
+    data["matches"] = [match for match in data["matches"] if int(match["id"]) != int(match_id)]
+
+    if len(data["matches"]) == original_match_count:
+        raise ValueError("El partido no existe.")
+
+    data["predictions"] = [
+        prediction
+        for prediction in data["predictions"]
+        if int(prediction["match_id"]) != int(match_id)
+    ]
+    _write_data(data)
+
+
 def get_predictions() -> list[dict[str, Any]]:
     """Return all predictions."""
     return deepcopy(_read_data()["predictions"])

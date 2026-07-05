@@ -8,7 +8,7 @@ import streamlit as st
 
 from auth import require_admin
 from scoring import calculate_points
-from storage import get_matches, get_prediction, get_predictions, save_prediction, update_prediction_points, upsert_match
+from storage import delete_match, get_matches, get_prediction, get_predictions, save_prediction, update_prediction_points, upsert_match
 
 
 st.set_page_config(page_title="Admin", page_icon="⚙️", layout="wide")
@@ -114,6 +114,22 @@ if submitted:
                 pred_away=int(pred_away),
             )
         st.rerun()
+
+if selected_match:
+    with st.expander("Eliminar partido", expanded=False):
+        st.warning("Eliminar un partido tambien elimina sus predicciones asociadas.")
+        confirm_delete = st.checkbox(
+            f"Confirmo que quiero eliminar {selected_match['home_team']} vs {selected_match['away_team']}",
+            key=f"confirm_delete_{selected_match['id']}",
+        )
+        if st.button("Eliminar partido", disabled=not confirm_delete, type="primary"):
+            try:
+                delete_match(selected_match["id"])
+            except ValueError as exc:
+                st.error(str(exc))
+            else:
+                st.success("Partido eliminado.")
+                st.rerun()
 
 st.divider()
 

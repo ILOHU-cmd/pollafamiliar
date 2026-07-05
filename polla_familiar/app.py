@@ -19,8 +19,6 @@ st.caption("Predice marcadores, suma puntos y mira cómo va la familia.")
 current_user = get_current_user()
 if current_user:
     st.success(f"Sesión activa: {current_user['username']}")
-    if current_user.get("is_admin"):
-        st.info("Usuario administrador. Puedes cargar partidos desde la página Admin.")
 
     with st.expander("Cambiar contraseña", expanded=False):
         with st.form("password_form"):
@@ -95,6 +93,3 @@ with tab_register:
                 login_user(user)
                 st.success("Cuenta creada. Ya estás dentro.")
                 st.rerun()
-
-st.divider()
-st.caption("Primer acceso admin: usuario `adminp0lla`, contraseña `p0lla2026`. Cámbialo o reemplázalo cuando agregues tu capa de base de datos.")
