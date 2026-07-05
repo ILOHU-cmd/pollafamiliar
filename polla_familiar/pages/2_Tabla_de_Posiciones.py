@@ -26,6 +26,3 @@ st.dataframe(
     df.rename(columns={"username": "Usuario", "points": "Puntos"})[["Usuario", "Puntos"]],
     use_container_width=True,
 )
-
-chart_df = df.set_index("username")[["points"]].rename(columns={"points": "Puntos"})
-st.bar_chart(chart_df)

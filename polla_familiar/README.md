@@ -16,8 +16,8 @@ streamlit run app.py
 
 La app crea automáticamente un usuario administrador inicial si no hay usuarios:
 
-- Usuario: `admin`
-- Contraseña: `admin123`
+- Usuario: `adminp0lla`
+- Contrasena: `p0lla2026`
 
 Desde la página Admin puedes crear partidos manualmente y cargar marcadores finales.
 

@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from scoring import calculate_points
+
 
 DATA_DIR = Path(__file__).parent / "data"
 DATA_FILE = DATA_DIR / "polla_data.json"
@@ -103,21 +105,58 @@ def create_user(username: str, password_hash: str, is_admin: bool = False) -> di
 def update_user(
     *,
     user_id: int,
+    username: str | None = None,
     password_hash: str | None = None,
+    is_admin: bool | None = None,
 ) -> dict[str, Any]:
-    """Update a user's password hash. Raises ValueError if user does not exist."""
+    """Update a user. Raises ValueError if user does not exist or username is taken."""
     data = _read_data()
 
     for index, user in enumerate(data["users"]):
         if int(user["id"]) == int(user_id):
             updated = {**user}
+            if username is not None:
+                normalized_username = username.strip()
+                if not normalized_username:
+                    raise ValueError("El usuario no puede quedar vacio.")
+                if any(
+                    int(other["id"]) != int(user_id)
+                    and other["username"].lower() == normalized_username.lower()
+                    for other in data["users"]
+                ):
+                    raise ValueError("El usuario ya existe.")
+                updated["username"] = normalized_username
             if password_hash:
                 updated["password_hash"] = password_hash
+            if is_admin is not None:
+                updated["is_admin"] = bool(is_admin)
             data["users"][index] = updated
+            if not any(existing.get("is_admin") for existing in data["users"]):
+                raise ValueError("Debe existir al menos un administrador.")
             _write_data(data)
             return deepcopy(updated)
 
     raise ValueError("El usuario no existe.")
+
+
+def delete_user(user_id: int) -> None:
+    """Delete a user and their predictions, keeping at least one admin."""
+    data = _read_data()
+    user = next((existing for existing in data["users"] if int(existing["id"]) == int(user_id)), None)
+    if user is None:
+        raise ValueError("El usuario no existe.")
+
+    remaining_users = [existing for existing in data["users"] if int(existing["id"]) != int(user_id)]
+    if not any(existing.get("is_admin") for existing in remaining_users):
+        raise ValueError("Debe existir al menos un administrador.")
+
+    data["users"] = remaining_users
+    data["predictions"] = [
+        prediction
+        for prediction in data["predictions"]
+        if int(prediction["user_id"]) != int(user_id)
+    ]
+    _write_data(data)
 
 
 def get_matches() -> list[dict[str, Any]]:
@@ -170,6 +209,7 @@ def upsert_match(
         if match is None:
             raise ValueError("El partido no existe.")
 
+    _recalculate_points_for_match(data, int(match["id"]))
     _write_data(data)
     return deepcopy(match)
 
@@ -221,6 +261,9 @@ def save_prediction(
         "pred_away": int(pred_away),
         "points": points,
     }
+    if points is None:
+        match = next((match for match in data["matches"] if int(match["id"]) == int(match_id)), None)
+        payload["points"] = _calculate_prediction_points(payload, match)
 
     prediction = None
     for index, existing in enumerate(data["predictions"]):
@@ -247,6 +290,55 @@ def update_prediction_points(prediction_id: int, points: int | None) -> dict[str
             _write_data(data)
             return deepcopy(updated)
     raise ValueError("La predicción no existe.")
+
+
+def _calculate_prediction_points(
+    prediction: dict[str, Any],
+    match: dict[str, Any] | None,
+) -> int | None:
+    """Calculate points for a prediction using its match score."""
+    if not match:
+        return None
+    return calculate_points(
+        int(prediction["pred_home"]),
+        int(prediction["pred_away"]),
+        match.get("home_score"),
+        match.get("away_score"),
+    )
+
+
+def _recalculate_points_for_match(data: dict[str, list[dict[str, Any]]], match_id: int) -> int:
+    """Refresh all prediction points for one match in-place."""
+    match = next((existing for existing in data["matches"] if int(existing["id"]) == int(match_id)), None)
+    updated = 0
+    for index, prediction in enumerate(data["predictions"]):
+        if int(prediction["match_id"]) != int(match_id):
+            continue
+        data["predictions"][index] = {
+            **prediction,
+            "points": _calculate_prediction_points(prediction, match),
+        }
+        updated += 1
+    return updated
+
+
+def recalculate_all_points() -> dict[str, int]:
+    """Refresh every prediction from the current match scores."""
+    data = _read_data()
+    updated = 0
+    without_score = 0
+    matches_by_id = {int(match["id"]): match for match in data["matches"]}
+
+    for index, prediction in enumerate(data["predictions"]):
+        match = matches_by_id.get(int(prediction["match_id"]))
+        points = _calculate_prediction_points(prediction, match)
+        data["predictions"][index] = {**prediction, "points": points}
+        updated += 1
+        if points is None:
+            without_score += 1
+
+    _write_data(data)
+    return {"updated": updated, "without_score": without_score}
 
 
 def get_leaderboard() -> list[dict[str, Any]]:
