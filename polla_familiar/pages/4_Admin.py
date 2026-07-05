@@ -11,13 +11,16 @@ from auth import hash_password, login_user, require_admin
 from storage import (
     create_user,
     delete_match,
+    delete_prediction,
     delete_user,
     get_matches,
     get_prediction,
     get_predictions,
     get_users,
     recalculate_all_points,
+    recalculate_points_for_match,
     save_prediction,
+    update_prediction_points,
     update_user,
     upsert_match,
 )
@@ -218,39 +221,84 @@ with tab_users:
                     st.rerun()
 
 with tab_predictions:
-    if st.button("Recalcular todos los puntos"):
-        result = recalculate_all_points()
-        st.success(
-            f"Predicciones revisadas: {result['updated']}. "
-            f"Sin marcador final: {result['without_score']}."
-        )
+    col_recalc1, col_recalc2 = st.columns([1, 3])
+    with col_recalc1:
+        if st.button("Recalcular todos los puntos", use_container_width=True):
+            result = recalculate_all_points()
+            st.success(
+                f"Predicciones revisadas: {result['updated']}. "
+                f"Sin marcador final: {result['without_score']}."
+            )
 
-    users_by_id = {user["id"]: user for user in get_users()}
-    matches_by_id = {match["id"]: match for match in get_matches()}
-    rows = []
-    for prediction in get_predictions():
-        match = matches_by_id.get(prediction["match_id"])
-        user = users_by_id.get(prediction["user_id"])
-        if not match or not user:
-            continue
-        actual = "-"
-        if match.get("home_score") is not None and match.get("away_score") is not None:
-            actual = f"{match['home_score']} - {match['away_score']}"
-        rows.append(
-            {
-                "Partido": f"{match['home_team']} vs {match['away_team']}",
-                "Fecha UTC": match.get("utc_date", ""),
-                "Estado": match.get("status", ""),
-                "Usuario": user["username"],
-                "Eleccion": f"{prediction['pred_home']} - {prediction['pred_away']}",
-                "Marcador": actual,
-                "Puntos": prediction.get("points"),
-            }
+    with col_recalc2:
+        match_recalc_options = {"Seleccionar partido...": None}
+        for match in get_matches():
+            match_recalc_options[f"{match['home_team']} vs {match['away_team']}"] = match["id"]
+        selected_recalc_match = st.selectbox(
+            "Recalcular puntos de un partido especifico",
+            list(match_recalc_options.keys()),
+            key="recalc_match_select",
         )
+        if selected_recalc_match and match_recalc_options[selected_recalc_match] is not None:
+            if st.button(f"Recalcular puntos de {selected_recalc_match}"):
+                recalculate_points_for_match(match_recalc_options[selected_recalc_match])
+                st.success(f"Puntos recalculados para {selected_recalc_match}.")
+                st.rerun()
 
     st.subheader("Historial de predicciones")
-    if rows:
-        df = pd.DataFrame(rows).sort_values(["Fecha UTC", "Partido", "Usuario"])
-        st.dataframe(df, use_container_width=True, hide_index=True)
-    else:
+    users_by_id = {user["id"]: user for user in get_users()}
+    matches_by_id = {match["id"]: match for match in get_matches()}
+    predictions_list = get_predictions()
+    if not predictions_list:
         st.info("Todavia no hay predicciones guardadas.")
+    else:
+        for prediction in predictions_list:
+            match = matches_by_id.get(prediction["match_id"])
+            user = users_by_id.get(prediction["user_id"])
+            if not match or not user:
+                continue
+
+            actual = "-"
+            if match.get("home_score") is not None and match.get("away_score") is not None:
+                actual = f"{match['home_score']} - {match['away_score']}"
+
+            with st.container(border=True):
+                cols = st.columns([3, 1, 1, 1, 1])
+                cols[0].write(
+                    f"**{match['home_team']} vs {match['away_team']}**  "
+                    f"_{user['username']}_  "
+                    f"Eleccion: {prediction['pred_home']}-{prediction['pred_away']}  "
+                    f"Marcador: {actual}  "
+                    f"Puntos: **{prediction.get('points', '-')}**"
+                )
+
+                if cols[1].button("Recalcular", key=f"recalc_pred_{prediction['id']}"):
+                    updated = update_prediction_points(
+                        prediction["id"],
+                        None,
+                    )
+                    match_obj = matches_by_id.get(prediction["match_id"])
+                    if match_obj:
+                        recalculate_points_for_match(prediction["match_id"])
+                    st.rerun()
+
+                new_points = cols[2].number_input(
+                    "Pts",
+                    value=int(prediction["points"]) if prediction.get("points") is not None else 0,
+                    min_value=0,
+                    step=1,
+                    key=f"points_input_{prediction['id']}",
+                    label_visibility="collapsed",
+                )
+                if cols[3].button("Asignar", key=f"set_points_{prediction['id']}"):
+                    update_prediction_points(prediction["id"], int(new_points))
+                    st.success("Puntos asignados.")
+                    st.rerun()
+
+                if cols[4].button("Eliminar", key=f"del_pred_{prediction['id']}", type="primary"):
+                    try:
+                        delete_prediction(prediction["id"])
+                        st.success("Prediccion eliminada.")
+                        st.rerun()
+                    except ValueError as exc:
+                        st.error(str(exc))

@@ -292,6 +292,27 @@ def update_prediction_points(prediction_id: int, points: int | None) -> dict[str
     raise ValueError("La predicción no existe.")
 
 
+def delete_prediction(prediction_id: int) -> None:
+    """Delete a single prediction by its id."""
+    data = _read_data()
+    initial_count = len(data["predictions"])
+    data["predictions"] = [p for p in data["predictions"] if int(p["id"]) != int(prediction_id)]
+    if len(data["predictions"]) == initial_count:
+        raise ValueError("La prediccion no existe.")
+    _write_data(data)
+
+
+def recalculate_points_for_match(match_id: int) -> dict[str, Any]:
+    """Recalculate points for all predictions of a match and return the match."""
+    data = _read_data()
+    _recalculate_points_for_match(data, int(match_id))
+    _write_data(data)
+    match = next((m for m in data["matches"] if int(m["id"]) == int(match_id)), None)
+    if match is None:
+        raise ValueError("El partido no existe.")
+    return deepcopy(match)
+
+
 def _calculate_prediction_points(
     prediction: dict[str, Any],
     match: dict[str, Any] | None,
